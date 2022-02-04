@@ -1,0 +1,150 @@
+#!/usr/bin/perl
+
+use strict;
+
+($#ARGV > -1) or die "usage: $0<original file of single-cell expression data, downloaded from NCBI>";
+
+if($ARGV[0] =~ /\.gz$/){
+  open IN, "gzip -dc $ARGV[0] |  "  or die;
+}
+else{
+  open IN, $ARGV[0] or die;
+}
+my $line;
+my (@fields1, @fields2, @fields3, @fields4);;
+
+$line = <IN>;
+chomp($line);
+my @secondHeader = split(/\t/, $line);
+
+$line = <IN>;
+
+$line = <IN>;
+chomp($line);
+@fields1 = split(/\t/, $line);
+my $n1 = @fields1;
+
+$line = <IN>;
+chomp($line);
+@fields2 = split(/\t/, $line);
+my $n2 = @fields1;
+
+$line = <IN>;
+chomp($line);
+@fields3 = split(/\t/, $line);
+my $n3 = @fields1;
+
+$line = <IN>;
+chomp($line);
+@fields4 = split(/\t/, $line);
+my $n4 = @fields1;
+
+#print "numbers: n1:$n1 n2:$n2 n3:$n3 n4:$n4\n";
+
+#Lymph node
+#classified  as cancer cell
+#classified as non-cancer cells
+#non-cancer cell type
+
+my %nameOf = (
+  "1_0_1_Endothelial" => "lymphEndo",
+  "1_0_1_Fibroblast" => "lymphFibro",
+  "1_0_1_B cell" => "lymphB",
+  "1_0_1_myocyte" => "lymphMyo",
+  "1_0_1_-Fibroblast" => "lymph-Fibro",
+  "1_0_1_Macrophage" => "lymphMacro",
+  "1_0_1_T cell" => "lymphT",
+  "1_0_1_Dendritic" => "lymphDen",
+  "1_0_1_Mast" => "lymphMast",
+  "1_1_0_0" => "metast",
+  "0_0_1_Endothelial" => "normalEndo",
+  "0_0_1_Fibroblast" => "normalFibro",
+  "0_0_1_B cell" => "normalB",
+  "0_0_1_myocyte" => "normalMyo",
+  "0_0_1_-Fibroblast" => "normal-Fibro",
+  "0_0_1_Macrophage" => "normalMacro",
+  "0_0_1_T cell" => "normalT",
+  "0_0_1_Dendritic" => "normalDen",
+  "0_0_1_Mast" => "normalMast",
+  "0_1_0_0" => "primary"
+);
+
+my %countsOf;
+my $class;
+my @validColumns;
+
+my $printLine = "gene_symbol";
+my $secondHeader = "sample_id"; # after my $printLine = “gene_symbol”
+for(my $i = 1; $i < @fields1; $i++){
+#  if($fields4[$i] eq "0" || $fields4[$i] eq "Endothelial"){
+   $class = "$fields1[$i]_$fields2[$i]_$fields3[$i]_$fields4[$i]";
+   if(defined $nameOf{$class}){
+     my @info = ($i, $nameOf{$class});
+     push(@validColumns, $i);
+     $printLine .= "\t$nameOf{$class}";
+     $secondHeader .= "\t$secondHeader[$i]"; # add this line
+   }
+#    $countsOf{$class}++;
+#  }
+}
+
+print "$secondHeader\n";
+
+print "$printLine\n";
+
+my @fields;
+my $value;
+
+while($line = <IN>){
+  chomp($line);
+  @fields = split(/\t/, $line);
+  $printLine = "$fields[0]";
+  for(my $i = 0; $i < @validColumns; $i++){
+    $value = $fields[$validColumns[$i]];
+    $value = (2**$value) - 1;
+    $value = int(10*$value);
+    #$value = formatNumber(10*$value);
+    $printLine .= "\t$value";
+  }
+  print "$printLine\n";
+}
+
+sub formatNumber{
+  my ($int, $dec) = split(/\./, $_[0]);
+  my $precision = 2;
+  if(defined $_[1]){ $precision = $_[1]; }
+  my $result = substr($dec, 0, $precision);
+  my $next = substr($dec, $precision, 1);
+  if(!defined $next){ $next = 0; }
+  if($next >= 5){
+    $result++;
+  }
+  if(length($result) > $precision){
+    $result = "";
+    for(my $i = 0; $i < $precision; $i++){ $result .= "0"; }
+    if($int =~ /^\-/){ # number is smaller than zero
+      $int--;
+    }
+    else{
+      $int++;
+    }
+  }
+  elsif(length($result) < $precision){
+    for(my $i = length($result); $i < $precision; $i++){
+      $result .= "0";
+    }
+  }
+  $result = $int . ".$result";
+  if($_[0] =~ /^.+\+/ || $_[0] =~ /^.+\-/){ # number is expressed as a power of 10 (in scientific notation)
+    my $rindex = rindex($_[0], "e");
+    my $coefficient = substr($_[0], 0, $rindex);
+    my $exponent = substr($_[0], $rindex);
+    $result = formatNumber($coefficient, $precision);
+    $result .= $exponent;
+  } # end number is in scientific notation
+  return $result;
+}
+
+
+
+
